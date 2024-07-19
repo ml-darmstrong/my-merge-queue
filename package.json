@@ -1,0 +1,20 @@
+{
+    "name": "my-merge-queue",
+    "version": "1.0.0",
+    "description": "",
+    "main": "main.mjs",
+    "scripts": {
+        "build": "tsc",
+        "start": "node main.mjs"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "octokit": "^4.0.2"
+    },
+    "devDependencies": {
+        "@octokit/graphql-schema": "^15.25.0",
+        "typescript": "^5.5.3"
+    }
+}
