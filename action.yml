@@ -1,0 +1,16 @@
+name: 'my-merge-queue'
+description: 'A merge queue that keeps branches up-to-date'
+
+inputs:
+  repository:
+      description: 'Github Repository (owner/repo)'
+  autoMerge:
+      description: 'Automatically merge PRs'
+      default: 'false'
+  requiredAllChecks:
+      description: 'Require all checks to pass before merging'
+      default: 'false'
+
+runs:
+  using: node20
+  main: action/index.cjs

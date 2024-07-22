@@ -1,11 +1,4 @@
-import { Octokit } from 'octokit';
-const NAME_REGEX = /^[a-z0-9-]+$/;
-// Octokit.js
-// https://github.com/octokit/core.js#readme
-const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN,
-});
-async function searchPullRequests(input) {
+async function searchPullRequests(octokit, input) {
     const query = `
     query ($owner:String!, $repo: String!, $num: Int = 10, $cursor: String) {
         repository(owner: $owner, name: $repo) {
@@ -43,7 +36,7 @@ async function searchPullRequests(input) {
     });
     return response.repository.pullRequests?.edges;
 }
-async function compare(input) {
+async function compare(octokit, input) {
     const query = `
         query ($owner: String!, $repo: String!, $target: String!, $headRef: String!) {
         repository(owner: $owner, name: $repo) {
@@ -60,7 +53,7 @@ async function compare(input) {
     const response = await octokit.graphql(query, input);
     return response.repository.ref?.compare;
 }
-async function mergePullRequest(input) {
+async function mergePullRequest(octokit, input) {
     const query = `
     mutation ($input: MergePullRequestInput!) {
         mergePullRequest(input: $input) {
@@ -71,7 +64,7 @@ async function mergePullRequest(input) {
     const response = await octokit.graphql(query, { input });
     return response.mergePullRequest;
 }
-async function updatePullRequestBranch(input) {
+async function updatePullRequestBranch(octokit, input) {
     const query = `
     mutation ($input: UpdatePullRequestBranchInput!) {
         updatePullRequestBranch(input: $input) {
@@ -82,8 +75,8 @@ async function updatePullRequestBranch(input) {
     const response = await octokit.graphql(query, { input });
     return response.updatePullRequestBranch;
 }
-async function step({ owner, repo, author, autoMerge, requireAllChecks }) {
-    const pullRequests = await searchPullRequests({ owner, repo });
+export async function step({ octokit, owner, repo, author, autoMerge, requireAllChecks }) {
+    const pullRequests = await searchPullRequests(octokit, { owner, repo });
     if (!pullRequests) {
         console.log(`Could not find any PRs`);
         return;
@@ -109,7 +102,7 @@ async function step({ owner, repo, author, autoMerge, requireAllChecks }) {
     console.log(`PR ${pr.number} ${pr.title}`);
     console.log(`  Status: ${pr.statusCheckRollup?.state}`);
     console.log(`Comparing ${pr.baseRefName} to ${pr.headRefName}`);
-    const compResult = await compare({ owner, repo, target: pr.baseRefName, headRef: pr.headRefName });
+    const compResult = await compare(octokit, { owner, repo, target: pr.baseRefName, headRef: pr.headRefName });
     if (!compResult) {
         console.error(`No comparison result`);
         return;
@@ -118,7 +111,7 @@ async function step({ owner, repo, author, autoMerge, requireAllChecks }) {
     console.log(`Branch is behind by ${compResult.behindBy} commits`);
     if (compResult.behindBy > 0) {
         console.log(`Updating branch`);
-        const updateResult = await updatePullRequestBranch({ pullRequestId: pr.id, updateMethod: "MERGE" });
+        const updateResult = await updatePullRequestBranch(octokit, { pullRequestId: pr.id, updateMethod: "MERGE" });
         console.log(updateResult);
         return;
     }
@@ -132,7 +125,7 @@ async function step({ owner, repo, author, autoMerge, requireAllChecks }) {
         else {
             try {
                 console.log(`Merging PR ${pr.number} ${pr.title}`);
-                const mergeResult = await mergePullRequest({ pullRequestId: pr.id, mergeMethod: "SQUASH" });
+                const mergeResult = await mergePullRequest(octokit, { pullRequestId: pr.id, mergeMethod: "SQUASH" });
                 console.log(mergeResult);
             }
             catch (e) {
@@ -142,68 +135,3 @@ async function step({ owner, repo, author, autoMerge, requireAllChecks }) {
         }
     }
 }
-function printUsage() {
-    console.log(`Usage: npm start -- --owner <owner> --repo <repo> [--author <author>] [--automerge] [--requireAllChecks]`);
-}
-function exit(reason) {
-    console.error(reason);
-    printUsage();
-    process.exit(1);
-}
-function getRunOptions() {
-    const runOptions = {
-        owner: '',
-        repo: '',
-    };
-    for (let i = 2; i < process.argv.length;) {
-        const arg = process.argv[i];
-        switch (arg.toLowerCase()) {
-            case '--automerge': {
-                runOptions.autoMerge = true;
-                i++;
-                break;
-            }
-            case '--requireallchecks': {
-                runOptions.requireAllChecks = true;
-                i++;
-                break;
-            }
-            case '--repo': {
-                runOptions.repo = process.argv[i + 1];
-                if (!NAME_REGEX.test(runOptions.repo)) {
-                    exit(`Invalid repo ${runOptions.repo}`);
-                }
-                i += 2;
-                break;
-            }
-            case '--owner': {
-                runOptions.owner = process.argv[i + 1];
-                if (!NAME_REGEX.test(runOptions.owner)) {
-                    exit(`Invalid owner ${runOptions.owner}`);
-                }
-                i += 2;
-                break;
-            }
-            case '--author': {
-                runOptions.author = process.argv[i + 1];
-                if (!NAME_REGEX.test(runOptions.author)) {
-                    exit(`Invalid author ${runOptions.author}`);
-                }
-                i += 2;
-                break;
-            }
-            default: {
-                exit(`Unknown option ${arg}`);
-            }
-        }
-    }
-    return runOptions;
-}
-// Main
-const runOptions = getRunOptions();
-async function run() {
-    await step(runOptions);
-    console.log(`Retry in 5 minutes`);
-    setTimeout(() => run(), 1000 * 60 * 5);
-}
-run();
